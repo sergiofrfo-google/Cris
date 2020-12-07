@@ -1,0 +1,2535 @@
+const urlToMasterAPI = "https://hq1.appsflyer.com/master/v4?";
+const urlToSlackAPI = "https://slack.com/api/";
+
+const apiTokenCellName = "C2";
+const apiChatTokenCellName = "C4";
+const channelNameCellName = "C6";
+const appIDCellName = "D2";
+const ltvKPIsRangeName = "B6:E22";
+const groupingsRangeName = "G6:I21";
+const listOfRulesRange = "B3";
+const widthOfRulesRange = 7;
+const listOfRawData = "I3"
+const widthOfRawData = 5;
+
+const nameMainMenu = "Wizard";
+const nameFirstMenuItem = "Create a new rule";
+const nameSecondMenuItem = "Run one rule (2 days before yesterday)";
+const nameThirdMenuItem = "Run one rule (date range)";
+const nameFourthMenuItem = "Send a message to the channel";
+const nameFifthMenuItem = "Create a new binding between rule and robot";
+const nameSixthMenuItem = "Manual start Math Robots **";
+
+const generalSettings = "GeneralSettings";
+const ruleTemplate = "RuleTemplate";
+const compliances = "Compliances";
+const robotBindings = "RobotBindings";
+const listOfRobots = "ListOfRobots";
+
+const msgErrorTitle = "Error";
+const msgInfoTitle = "Information";
+const msgStatusTitle = "Status";
+
+const nameOfDataFolderTmpl = "DataFromAPI";
+
+const msgText0000 = "'.";
+const msgText0001 = "This spreadsheet must contain the '"; 
+const msgText0002 = "' sheet!\nSorry, I can't find it...\n\nPlease restore this spreadsheet from the master copy and rerun the script.";
+const msgText0003 = "At least one KPI value must be selected !";
+const msgText0004 = "Attention !\nA new rule will be created based on the specified parameters.\n\nDo you want it?";
+const msgText0005 = "New rule was successfully created!";
+const msgText0006 = "There are no rules saved on the '";
+const msgText0007 = "' sheet yet.\n\nPlease use the '";
+const msgText0008 = "' menu item to create a new rule.";
+const msgText0009 = "Please enter a description of the new rule:";
+const msgText0010 = "Please enter the Rule ID you want to execute:";
+const msgText0011 = "Receiving information according to the '";
+const msgText0012 = "' rule from the API service and saving it was successful!";
+const msgText0013 = "The rule ID '";
+const msgText0014 = "' was not found in the list of rules !";
+const msgText0015 = "The rule you selected is marked as 'Inactive'.\n\nAre you sure you want to execute this rule?";
+const msgText0016 = "API Token can't be empty!\n\nPlease enter a valid API Token on the sheet '";
+const msgText0018 = "The API-Service server stopped responding to requests because it exceeded the daily / month request limit.";
+const msgText0019 = "The date you entered is not correct!\nPlease be careful when entering and follow the required format.";
+const msgText0020 = "The date 'TO' must be at least 2 days less than the today's date!";
+const msgText0021 = "The date 'FROM' must be less than date 'TO'!";
+const msgText0022 = "Date FROM";
+const msgText0023 = "Date TO";
+const msgText0024 = "Please input date (YYYY-MM-DD):";
+const msgText0025 = "There were errors in the process of obtaining information in accordance with the '";
+const msgText0026 = "' rule!";
+const msgText0027 = "The Slack API-Server did not respond to request.";
+const msgText0028 = "Enter your message:";
+const msgText0029 = "To create a binding of a mathematical robot to a rule, you must be on the '";
+const msgText0030 = "' sheet.\n\nThe cell in column 'B' with the number of the data collection rule for which you want to connect a mathematical data processing robot should be active as a current cell.";
+const msgText0031 = "There must be at least one robot in the list of robots on the '";
+const msgText0032 = "' sheet!";
+const msgText0033 = "Enter the robot number:";
+const msgText0034 = "New binding was successfully created!";
+const msgText0035 = "The robot number '";
+const msgText0036 = "' was not found in the list of robots on the '";
+const msgText0037 = "Binding robot number '";
+const msgText0038 = "' to rule number '";
+const msgText0039 = "' already exists in the binding list!";
+const msgText0040 = "An error occurred while receiving data from the API server!";
+const msgText0041 = "More details:";
+
+
+const TitleBgColor = "DarkBlue";
+const TitleFontColor = "White";
+
+const cmdPostMessage = "chat.postMessage?";
+
+const oneDayMs = 24 * 60 * 60 * 1000;  // one day in ms
+const oneMinMs = 60 * 1000;            // one min in ms
+
+let robotFunctionsArr = [robot001,robot002,robot003];
+
+// FUNCTIONS
+// *****************************************************************************************************************************
+// function onOpen()
+// *****************************************************************************************************************************
+function onOpen()
+{
+  var ui = SpreadsheetApp.getUi();                       
+                                   
+  ui.createMenu(nameMainMenu)
+    .addItem(nameFirstMenuItem, 'myFunction')
+    .addItem(nameFifthMenuItem, 'myFunctionFifth')
+    .addSeparator()
+    .addItem(nameSecondMenuItem, 'myFunctionSecond')
+    .addItem(nameThirdMenuItem, 'myFunctionThird')
+    .addSeparator()
+    .addItem(nameFourthMenuItem, 'myFunctionFourth')
+    .addSeparator()
+    .addSeparator()
+    .addItem(nameSixthMenuItem, 'myFunctionSixth')
+    .addToUi();                              
+  
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// function createRule()
+// *****************************************************************************************************************************
+function createRule()
+{
+  var ui = SpreadsheetApp.getUi();                       
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var ruleTemplateSheet = ss.getSheetByName(ruleTemplate);
+  if (ruleTemplateSheet == null)
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001+ruleTemplate+msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+
+  ruleTemplateSheet.activate();
+  
+  var response = ui.alert(
+                 msgInfoTitle,
+                 msgText0004,
+                 ui.ButtonSet.OK_CANCEL
+                 );    
+  if (response == "CANCEL") return;
+  
+  var appID = ruleTemplateSheet.getRange(appIDCellName).getCell(1,1).getValue().toString();
+  //  Logger.log(appID);
+  
+  var ltvKPIsRange = ruleTemplateSheet.getRange(ltvKPIsRangeName);
+  var ltvKPIsRangeValues = ltvKPIsRange.getValues();
+  var groupingsRange = ruleTemplateSheet.getRange(groupingsRangeName);
+  var groupingsRangeValues = groupingsRange.getValues();
+  // Logger.log(ltvKPIsRange.getA1Notation());
+  // Logger.log(ltvKPIsRangeValues);
+  // Logger.log(groupingsRange.getA1Notation());
+  // Logger.log(groupingsRangeValues);
+
+  var strKPIs = "";
+  for (var i=0; i<ltvKPIsRange.getHeight(); i++)
+      if (ltvKPIsRangeValues[i][0] == true) strKPIs = strKPIs + ltvKPIsRangeValues[i][2] + ",";
+  if (strKPIs == "")
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0003,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  strKPIs = strKPIs.slice (0, -1);
+  // Logger.log(strKPIs);
+ 
+  var strGroupings = "";
+  for (var i=0; i<groupingsRange.getHeight(); i++)
+      if (groupingsRangeValues[i][0] == true) strGroupings = strGroupings + groupingsRangeValues[i][2] + ",";
+  if (strGroupings == "")
+    ;
+  else 
+    strGroupings = strGroupings.slice (0, -1);
+  // Logger.log(strGroupings);
+  
+  var descr = Browser.inputBox(msgText0009, Browser.Buttons.OK);
+  // Logger.log(descr);
+  
+  var compliancesSheet = ss.getSheetByName(compliances);
+  if (compliancesSheet == null)
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001+compliances+msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+
+  var tempRange = compliancesSheet.getRange(listOfRulesRange);
+  var row = tempRange.getRow();
+  var col = tempRange.getColumn();
+  // Logger.log("Row:" + row + ", Col: " + col);
+  
+  var compliancesDataRange = compliancesSheet.getDataRange();
+  var height = compliancesDataRange.getHeight();
+  // Logger.log("Height: " + height);
+  
+  var endRow = 0;
+  if (row > height) endRow = row + 1; else endRow = height + 1;
+  var startRow = row; 
+  // Logger.log("Start row: " + startRow + ", End row: " + endRow);
+  
+  var putRange = compliancesSheet.getRange(row, col, endRow-row + 1, widthOfRulesRange);
+  
+  var putRangeValues = putRange.getValues();
+  for (var j=0; j<endRow-row+1; j++)
+    {
+     var cellValue = putRangeValues[j][0].toString();
+     if (cellValue == "")
+       {
+         var dateNow = new Date();
+         var dateNowYear = dateNow.getFullYear().toString();
+         var dateNowMonth = (dateNow.getMonth() + 1).toString();
+         if (dateNowMonth.length == 1) dateNowMonth = "0" + dateNowMonth;
+         var dateNowDay = dateNow.getDate().toString();
+         if (dateNowDay.length == 1) dateNowDay = "0" + dateNowDay;
+         var dateNowHour = dateNow.getHours().toString();
+         if (dateNowHour.length == 1) dateNowHour = "0" + dateNowHour;
+         var dateNowMin = dateNow.getMinutes().toString();
+         if (dateNowMin.length == 1) dateNowMin = "0" + dateNowMin;
+         var dateNowSec = dateNow.getSeconds().toString();
+         if (dateNowSec.length == 1) dateNowSec = "0" + dateNowSec;
+         
+         var id = dateNowYear+dateNowMonth+dateNowDay+dateNowHour+dateNowMin+dateNowSec;
+         
+         putRangeValues[j][0] = id;
+         putRangeValues[j][1] = appID;
+         putRangeValues[j][2] = strKPIs;
+         putRangeValues[j][3] = strGroupings;
+         putRangeValues[j][4] = descr;
+         putRangeValues[j][5] = true;
+         putRange.getCell(j + 1, 6).insertCheckboxes();
+         break;
+       }
+     else
+       ;
+    }
+  putRange.setValues(putRangeValues);
+
+  var tempRange = compliancesSheet.getRange(listOfRawData);
+  var row = tempRange.getRow();
+  var col = tempRange.getColumn();
+  // Logger.log("Row:" + row + ", Col: " + col);
+  
+  var nameOfDataFolder = nameOfDataFolderTmpl + "_" + appID;
+  
+  var searchFor = 'title = "' + nameOfDataFolder + '"';
+  // Logger.log(searchFor);
+  
+  var folders = DriveApp.getRootFolder().searchFolders(searchFor);
+  // Logger.log(folders);
+  
+  if (!(folders.hasNext())) 
+    var folder = DriveApp.createFolder(nameOfDataFolder);
+  else
+    var folder = folders.next(); 
+  
+  var folderID = folder.getId();
+  // Logger.log(folderID);
+  
+  var newSpreadsheet = SpreadsheetApp.create("rd" + id);
+  var newFile = DriveApp.getFileById(newSpreadsheet.getId());
+  newFile.moveTo(folder);
+  
+  newFile.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
+   
+  var putRange = compliancesSheet.getRange(row, col, endRow-row + 1, widthOfRawData);
+  var putRangeValues = putRange.getValues();
+       
+  putRangeValues[j][0] = id;
+  putRangeValues[j][1] = newFile.getId();
+  putRangeValues[j][2] = appID;
+  putRangeValues[j][3] = newFile.getLastUpdated();
+  putRangeValues[j][4] = newFile.getUrl();
+  putRange.getCell(j + 1, 4).setNumberFormat("yyyy-MM-dd HH:mm:ss");
+
+  putRange.setValues(putRangeValues);
+  
+  ss.toast(msgText0005, msgStatusTitle, 4);
+  
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// runOneRule(numRule)   typeOfExec = 0 (manual) or 1 (scheduled) / flagRange = true/false for dateStart/dateEnd
+// *****************************************************************************************************************************
+function runOneRuleExec(numRule, typeOfExec, flagRange, dateStart, dateEnd)
+{
+  var haveError = false;
+  
+  if (typeOfExec == 0) var ui = SpreadsheetApp.getUi();                       
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  if (CompliancesSheet == null)
+    {   // Sheet "Compliances" not found in the Spreadsheet 
+        // ToDo: Write here code for writing this error to the errors log.     
+    return false;
+    }
+  
+  if (!(isRuleIdInlist(numRule, typeOfExec)))
+    {   // The rule ID was not found in the list of rules 
+        // ToDo: Write here code for writing this error to the errors log.     
+    return false;
+    }
+  
+  if (!isSettingsSheetExist())
+    {   // Sheet "GeneralSettings" not found in the Spreadsheet 
+        // ToDo: Write here code for writing this error to the errors log.     
+    return false;
+    }   
+
+  var apiTokenStr = "" + getApiToken();
+  if (apiTokenStr == "")
+    {   // 
+        // ToDo: Write here code for writing this error to the errors log.     
+    return false;
+    }   
+  
+  apiTokenStr = "api_token=" + apiTokenStr;
+  
+  var compliancesSheetDataRange = CompliancesSheet.getDataRange();
+  var compDataRangeHeight = compliancesSheetDataRange.getHeight();  
+  var listOfRulesValues = compliancesSheetDataRange.getValues();
+
+  for (var i=2; i<compDataRangeHeight; i++)
+    if (listOfRulesValues[i][1] == numRule) break;  
+  // Logger.log(i);
+  
+  var usedRuleNumRow = i; 
+
+  var kpisStr = listOfRulesValues[i][3].toString();
+  var arrKPIsJSON = bldCorrespondenceListKPIs(kpisStr);
+  // Logger.log(arrKPIsJSON);
+  
+  var groupingsStr = listOfRulesValues[i][4].toString();
+  var arrGroupJSON = bldCorrespondenceListGroupe(groupingsStr);
+  // Logger.log(arrGroupJSON); 
+  
+  var allTagsJSON = arrKPIsJSON.concat(arrGroupJSON);
+  
+  var dataFromJSON = new Array();
+  for (z=0; z < allTagsJSON.length; z++)
+    dataFromJSON[z] = [];
+  // Logger.log(allTagsJSON);
+
+  kpisStr = "kpis=" + kpisStr;
+  groupingsStr = "groupings=" + groupingsStr;
+  
+  var appIDStr = "app_id=" + listOfRulesValues[i][2].toString();
+  
+  if (flagRange)
+    {
+    var dateFromForSheet = datePrepare(dateStart);
+    var dateToStr = "to=" + datePrepare(dateEnd);
+    }
+  else
+    {
+    var now = new Date();
+    var dateFromForSheet = dateFrom(now);
+    var dateToStr = "to=" + dateTo(now);
+    }  
+  
+  var dateFromStr = "from=" + dateFromForSheet;    
+  var formatStr = "format=json";
+  
+  var targetSpreadsheetId = listOfRulesValues[i][9].toString();
+  
+  // Logger.log("API Token: " + apiTokenStr);
+  // Logger.log("App ID: " + appIDStr);
+  // Logger.log("KPI'S: " + kpisStr);
+  // Logger.log("Groupings: " + groupingsStr);
+  // Logger.log("Format: " + formatStr);
+  // Logger.log("Date From: " + dateFromStr);
+  // Logger.log("Date To: " + dateToStr);
+  // Logger.log("Target Spreadsheet ID: " + targetSpreadsheetId);
+  
+  var urlRequest = urlToMasterAPI + apiTokenStr + "&" + appIDStr + "&" + dateFromStr + "&" + dateToStr + "&" + groupingsStr + "&" + kpisStr + "&" + formatStr;
+  Logger.log(urlRequest);
+  
+  // is CTR needed ?
+  if ( (urlRequest.includes("impressions")) && (urlRequest.includes("clicks")) )
+    var createCTR = true;
+  else
+    var createCTR = false;
+  
+  try                  // request to API
+    {
+    var obj = importJSON(urlRequest);
+    }
+  catch(err)
+    {
+    haveError = true; 
+    Logger.log(err.name);  
+    Logger.log(err.message);
+    Logger.log(err.stack);
+           
+    if (typeOfExec == 0)
+      {
+      Logger.log(err.name);  
+      Logger.log(err.message);
+      Logger.log(err.stack);
+
+      var response = ui.alert(
+                     msgErrorTitle,
+                     msgText0018,
+                     ui.ButtonSet.OK
+                     );
+      }
+    else
+      {
+        sendMessageToChannel(msgText0040, 1);
+        Logger.log(err.name);  
+        sendMessageToChannel(msgText0041, 1);
+        Logger.log(err.message);
+        sendMessageToChannel(err.name + ", " + err.message + ", " + err.stack, 1);
+        Logger.log(err.stack);
+      }
+    return false;  
+    }
+  // Logger.log(obj);
+  
+// allowQTYRequests--;
+// usedRequestsInCurrSession++;  
+
+  for(x=0; x<allTagsJSON.length; x++)
+    {
+    var cnt=0;
+    while(true)
+      {
+      var xpath = cnt.toString() + '/' + allTagsJSON[x];
+      var res = parsingJSON(obj,xpath);  
+      
+      if (res == "Error") break;  
+      
+      dataFromJSON[x][cnt] = res.toString();
+      cnt++;
+      }
+    }
+
+  // Logger.log(arrKPIsJSON);
+  // Logger.log(arrGroupJSON);
+  // Logger.log(allTagsJSON);
+  // Logger.log(dataFromJSON);
+  
+  var arrPositionGroup = new Array();
+  for (x=0; x < arrGroupJSON.length; x++)
+    arrPositionGroup.push(Number(allTagsJSON.indexOf(arrGroupJSON[x])));
+  // Logger.log(arrPositionGroup);
+  
+  var arrPositionKPIs = new Array();
+  for (x=0; x < arrKPIsJSON.length; x++)
+    arrPositionKPIs.push(Number(allTagsJSON.indexOf(arrKPIsJSON[x])));
+  // Logger.log(arrPositionKPIs);   
+  
+  var groupValues = new Array();
+  for(x=0; x < arrPositionGroup.length; x++)
+    groupValues[x] = [];
+    
+  for(x=0; x < arrPositionGroup.length; x++)
+    for(y=0; y < dataFromJSON[0].length; y++)
+      groupValues[x].push(dataFromJSON[arrPositionGroup[x]][y]);
+  // Logger.log(groupValues);
+  
+/*  var arrCmbinations = createServiceCombinationsArray(groupValues.length, groupValues[0].length);
+    Logger.log(arrCmbinations);
+    for(var q=0; q<groupValues[0].length; q++)
+      { 
+        var tempSheetName = "";   
+        for(var w=0; w<groupValues.length; w++)
+          tempSheetName = tempSheetName + groupValues[w][arrCmbinations[w][q]] + "@";
+        tempSheetName = tempSheetName.slice (0, -1);
+      
+        Logger.log(tempSheetName);
+      }
+*/
+
+  var nameOfSheets = new Array();
+  
+  for (var q=0; q<groupValues[0].length; q++)
+    {
+    var tempSheetName = "";   
+    for(var w=0; w<groupValues.length; w++)
+      tempSheetName = tempSheetName + groupValues[w][q] + "@";
+    tempSheetName = tempSheetName.slice (0, -1); 
+   
+    nameOfSheets.push(tempSheetName);  
+    }
+  // Logger.log(nameOfSheets);     
+  
+  if(!isSpreadSheetExist(targetSpreadsheetId))
+    {   // Target Spreadsheet not found on Google Drive 
+        // ToDo: Write here code for writing this error to the errors log.     
+    return false;
+    }   
+  
+  if(isSpreadSheetEmpty(targetSpreadsheetId))
+    {
+    var dest_ss = SpreadsheetApp.openById(targetSpreadsheetId);
+    var arr_sheets = dest_ss.getSheets();
+    var delete_sheet = arr_sheets[0];
+      
+    for (var a=0; a < nameOfSheets.length; a++)
+      if(dest_ss.getSheetByName(nameOfSheets[a]) == null) 
+        dest_ss.insertSheet(nameOfSheets[a]); 
+      
+    if (nameOfSheets.indexOf(delete_sheet.getName()) == -1.0 ) 
+      dest_ss.deleteSheet(delete_sheet);  
+      
+    for (var a=0; a < nameOfSheets.length; a++)
+      {
+      if(createCTR)
+        var workDataRange = dest_ss.getSheetByName(nameOfSheets[a]).getRange(1, 1, 1, arrKPIsJSON.length + 2);
+      else
+        var workDataRange = dest_ss.getSheetByName(nameOfSheets[a]).getRange(1, 1, 1, arrKPIsJSON.length + 1);
+       
+      workDataRange.setBackground(TitleBgColor)
+                   .setFontColor(TitleFontColor) 
+                   .setFontWeight("bold")
+                   .setFontSize(12)
+                   .setHorizontalAlignment("center");
+      
+      if(createCTR)  
+        var workDataRange = dest_ss.getSheetByName(nameOfSheets[a]).getRange(1, 1, 2, arrKPIsJSON.length + 2); 
+      else
+        var workDataRange = dest_ss.getSheetByName(nameOfSheets[a]).getRange(1, 1, 2, arrKPIsJSON.length + 1); 
+        
+      var workDataRangeValues = workDataRange.getValues();
+      
+      for(var b=0; b < arrKPIsJSON.length; b++)
+        workDataRangeValues[0][b+1] = arrKPIsJSON[b];         
+      
+      if(createCTR) workDataRangeValues[0][b+1] = "CTR";  
+        
+      workDataRangeValues[0][0] = "Date"; 
+      workDataRange.setValues(workDataRangeValues);
+        
+      if(createCTR)
+        dest_ss.getSheetByName(nameOfSheets[a]).autoResizeColumns(2, arrKPIsJSON.length + 2);  
+      else
+        dest_ss.getSheetByName(nameOfSheets[a]).autoResizeColumns(2, arrKPIsJSON.length + 1);  
+      } 
+    }
+
+// add data to sheets 
+  
+  var dest_ss = SpreadsheetApp.openById(targetSpreadsheetId);
+      
+  for (var a=0; a < nameOfSheets.length; a++)
+    {
+    // Logger.log(nameOfSheets[a]);
+     
+    var usedSheet = dest_ss.getSheetByName(nameOfSheets[a]);
+    // Logger.log(usedSheet.getName());
+    if (usedSheet == null)
+      {
+        usedSheet = dest_ss.insertSheet(nameOfSheets[a]); 
+        
+        if(createCTR)
+          var tempDataRange = usedSheet.getRange(1, 1, 1, arrKPIsJSON.length + 2);
+        else
+          var tempDataRange = usedSheet.getRange(1, 1, 1, arrKPIsJSON.length + 1);
+        
+        tempDataRange.setBackground(TitleBgColor)
+                     .setFontColor(TitleFontColor) 
+                     .setFontWeight("bold")
+                     .setFontSize(12)
+                     .setHorizontalAlignment("center");
+
+        if(createCTR)
+          var workDataRange = usedSheet.getRange(1, 1, 2, arrKPIsJSON.length + 2); 
+        else
+          var workDataRange = usedSheet.getRange(1, 1, 2, arrKPIsJSON.length + 1); 
+        
+        var workDataRangeValues = workDataRange.getValues();
+      
+        for(var b=0; b < arrKPIsJSON.length; b++)
+          workDataRangeValues[0][b+1] = arrKPIsJSON[b];         
+        
+        if(createCTR) workDataRangeValues[0][b+1] = "CTR";
+       
+        workDataRangeValues[0][0] = "Date"; 
+        workDataRange.setValues(workDataRangeValues);
+        
+        if (createCTR)
+          usedSheet.autoResizeColumns(2, arrKPIsJSON.length + 2);
+        else
+          usedSheet.autoResizeColumns(2, arrKPIsJSON.length + 1);
+        
+        var usedSheet = dest_ss.getSheetByName(nameOfSheets[a]);   
+      }
+      
+    var usedDataRange = usedSheet.getDataRange();
+    var height = usedDataRange.getHeight();
+    // Logger.log(height);  
+      
+    if(createCTR)  
+      var workDataRange = usedSheet.getRange(1, 1, height + 2, arrKPIsJSON.length + 2);
+    else
+      var workDataRange = usedSheet.getRange(1, 1, height + 2, arrKPIsJSON.length + 1);
+      
+    var workDataRangeValues = workDataRange.getValues();
+    // Logger.log(workDataRangeValues);  
+      
+    for(var b=0; b < arrKPIsJSON.length; b++)
+      {
+      var value = dataFromJSON[arrPositionKPIs[b]][a];  
+      workDataRangeValues[height][b+1] = value;         
+      }
+    workDataRangeValues[height][0] = dateFromForSheet;     
+      
+    if(createCTR)
+      {
+      var posClicks = workDataRangeValues[0].indexOf("Clicks");
+      var posImpressions = workDataRangeValues[0].indexOf("Impressions");  
+      
+      var ctrValue = parseFloat(workDataRangeValues[height][posClicks]) / parseFloat(workDataRangeValues[height][posImpressions]);   
+        
+      workDataRangeValues[height][b+1] = ctrValue.toFixed(5);
+      }
+        
+    workDataRange.setValues(workDataRangeValues);
+    
+    usedSheet.setFrozenRows(1);
+    
+    if(createCTR)      
+      var sortDataRange = usedSheet.getRange(2, 1, height + 1, arrKPIsJSON.length + 2);  
+    else  
+      var sortDataRange = usedSheet.getRange(2, 1, height + 1, arrKPIsJSON.length + 1);  
+      
+      
+   var sortSpecObj = [{column: 1, ascending: true}];
+      
+   for (var qq = 2; qq < arrKPIsJSON.length + 2; qq++)   
+     sortSpecObj.push({column: qq, ascending: false});
+      
+   sortDataRange.sort(sortSpecObj);  
+      
+   removeDuplicateRowsOnSheet(usedSheet, 1);
+    
+    }
+
+  var usedFile = DriveApp.getFileById(targetSpreadsheetId);
+  listOfRulesValues[usedRuleNumRow][11] = usedFile.getLastUpdated(); 
+  compliancesSheetDataRange.setValues(listOfRulesValues);
+  
+  return !haveError;
+}
+
+
+// *****************************************************************************************************************************
+// getApiToken()
+// *****************************************************************************************************************************
+function getApiToken()
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var SettingsSheet = ss.getSheetByName(generalSettings);
+  var token = SettingsSheet.getRange(apiTokenCellName).getValue().toString();
+  // Logger.log(token);
+  
+  return token;
+}
+
+
+// *****************************************************************************************************************************
+// isSettingsSheetExist()
+// *****************************************************************************************************************************
+function isSettingsSheetExist()
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var SettingsSheet = ss.getSheetByName(generalSettings);
+  if (SettingsSheet == null)
+    return false;
+    
+  return true;  
+}
+
+
+// *****************************************************************************************************************************
+// isRuleTemplateSheetExist()
+// *****************************************************************************************************************************
+function isRuleTemplateSheetExist()
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var rulesSheet = ss.getSheetByName(ruleTemplate);
+  if (rulesSheet == null)
+    return false;
+    
+  return true;  
+}
+
+
+// *****************************************************************************************************************************
+// isCompliancesSheetExist()
+// *****************************************************************************************************************************
+function isCompliancesSheetExist()
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var compliancesSheet = ss.getSheetByName(compliances);
+  if (compliancesSheet == null)
+    return false;
+    
+  return true;  
+}
+
+
+// *****************************************************************************************************************************
+// isRobotBindingsSheetExist()
+// *****************************************************************************************************************************
+function isRobotBindingsSheetExist()
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var robotBindingsSheet = ss.getSheetByName(robotBindings);
+  if (robotBindingsSheet == null)
+    return false;
+    
+  return true;  
+}
+
+
+// *****************************************************************************************************************************
+// isListOfRobotsSheetExist()
+// *****************************************************************************************************************************
+function isListOfRobotsSheetExist()
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var listOfRobotsSheet = ss.getSheetByName(listOfRobots);
+  if (listOfRobotsSheet == null)
+    return false;
+    
+  return true;  
+}
+
+
+// *****************************************************************************************************************************
+// isCompliancesSheetEmpty()
+// *****************************************************************************************************************************
+function isCompliancesSheetEmpty()
+{
+  var ui = SpreadsheetApp.getUi();                       
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  if (CompliancesSheet == null)
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001+compliances+msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+    
+  var compliancesSheetDataRange = CompliancesSheet.getDataRange();
+  var compDataRangeHeight = compliancesSheetDataRange.getHeight();
+  // Logger.log(compDataRangeHeight);
+    
+  if (compDataRangeHeight == 2) 
+    return true;
+  else
+    return false;  
+}
+
+
+// *****************************************************************************************************************************
+// posRuleIdInlist()
+// *****************************************************************************************************************************
+function posRuleIdInlist(numRule)
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  var compliancesSheetDataRange = CompliancesSheet.getDataRange();
+  var listOfRulesValues = compliancesSheetDataRange.getValues();
+  var compDataRangeHeight = compliancesSheetDataRange.getHeight();
+  // Logger.log(compDataRangeHeight);
+  
+  if (compDataRangeHeight < 3) return false;
+  
+  for (var i=2; i<compDataRangeHeight; i++)
+    if (listOfRulesValues[i][1] == numRule) return i-1;
+    
+  return 0;  
+}
+
+
+// *****************************************************************************************************************************
+// isRuleIdInlist(numRule, typeOfExec)
+// *****************************************************************************************************************************
+function isRuleIdInlist(numRule, typeOfExec)
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  var compliancesSheetDataRange = CompliancesSheet.getDataRange();
+  var listOfRulesValues = compliancesSheetDataRange.getValues();
+  var compDataRangeHeight = compliancesSheetDataRange.getHeight();
+  // Logger.log(compDataRangeHeight);
+  
+  if (compDataRangeHeight < 3) return false;
+  
+  for (var i=2; i<compDataRangeHeight; i++)
+    if (listOfRulesValues[i][1] == numRule) return true;
+    
+  return false;  
+}
+
+
+// *****************************************************************************************************************************
+// getSpreadsheetID(posRule)
+// *****************************************************************************************************************************
+function getSpreadsheetID(posRule)
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  var compliancesSheetDataRange = CompliancesSheet.getDataRange();
+  var listOfRulesValues = compliancesSheetDataRange.getValues();
+
+  return listOfRulesValues[posRule+1][9];
+}
+
+
+// *****************************************************************************************************************************
+// getLastModified(posRule)
+// *****************************************************************************************************************************
+function getLastModified(posRule)
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  var compliancesSheetDataRange = CompliancesSheet.getDataRange();
+  var listOfRulesValues = compliancesSheetDataRange.getValues();
+
+  var lm = listOfRulesValues[posRule+1][11];
+  var dateLM = new Date(lm);
+  
+  return dateLM; 
+}
+
+
+// *****************************************************************************************************************************
+// getSpreadsheetURL(posRule)
+// *****************************************************************************************************************************
+function getSpreadsheetURL(posRule)
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  var compliancesSheetDataRange = CompliancesSheet.getDataRange();
+  var listOfRulesValues = compliancesSheetDataRange.getValues();
+
+  return listOfRulesValues[posRule+1][12];
+}
+
+
+// *****************************************************************************************************************************
+// getAppID(posRule)
+// *****************************************************************************************************************************
+function getAppID(posRule)
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  var compliancesSheetDataRange = CompliancesSheet.getDataRange();
+  var listOfRulesValues = compliancesSheetDataRange.getValues();
+
+  return listOfRulesValues[posRule+1][10];
+}
+
+
+// *****************************************************************************************************************************
+// isRuleActive(numRule)
+// *****************************************************************************************************************************
+function isRuleActive(numRule)
+{
+  var ui = SpreadsheetApp.getUi();                       
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  var compliancesSheetDataRange = CompliancesSheet.getDataRange();
+  var listOfRulesValues = compliancesSheetDataRange.getValues();
+  var compDataRangeHeight = compliancesSheetDataRange.getHeight();
+  // Logger.log(compDataRangeHeight);
+  
+  for (var i=2; i<compDataRangeHeight; i++)
+    if (listOfRulesValues[i][1] == numRule) break;
+  
+  return listOfRulesValues[i][6];
+}
+
+
+// *****************************************************************************************************************************
+// isMoreThanDayHasPassed(investigatedTime)
+// *****************************************************************************************************************************
+function isMoreThanDayHasPassed(investigatedTime)
+{
+  var now = new Date();
+  var inv = new Date(investigatedTime);
+  var nowMS = now.getTime();
+  var invMS = inv.getTime();
+
+  if ((nowMS - invMS) > oneDayMs) 
+    return true;
+  else
+    return false;
+}
+
+
+// *****************************************************************************************************************************
+// dateFrom()
+// *****************************************************************************************************************************
+function dateFrom(dateNow)
+{
+  var dateFromMS = dateNow.getTime() - 2 * oneDayMs;
+  var dateFrom = new Date(dateFromMS);
+  dateFrom.setTime(dateFromMS);
+  dateFrom.setHours(12, 0, 0, 0);
+  var dataToStr = datePrepare(dateFrom);
+  return dataToStr;
+}
+
+
+// *****************************************************************************************************************************
+// dateFrom2()
+// *****************************************************************************************************************************
+function dateFrom2(dateNow)
+{
+  var dateFromMS = dateNow.getTime() - 3 * oneDayMs;
+  var dateFrom = new Date(dateFromMS);
+  dateFrom.setTime(dateFromMS);
+  dateFrom.setHours(12, 0, 0, 0);
+  var dataToStr = datePrepare(dateFrom);
+  return dataToStr;
+}
+
+
+// *****************************************************************************************************************************
+// dateTo()
+// *****************************************************************************************************************************
+function dateTo(dateNow)
+{
+  var dateToMS = dateNow.getTime() - oneDayMs;
+  var dateTo = new Date(dateToMS);
+  dateTo.setTime(dateToMS);
+  dateTo.setHours(12, 0, 0, 0);
+  var dataToStr = datePrepare(dateTo);
+  return dataToStr;
+}
+
+
+// *****************************************************************************************************************************
+// datePrepare(dateForPrepare)
+// *****************************************************************************************************************************
+function datePrepare(dateForPrepare)
+{
+  var dateToYear = dateForPrepare.getFullYear().toString();
+  var dateToMonth = (dateForPrepare.getMonth() + 1).toString();
+  var dateToDay = dateForPrepare.getDate().toString();
+  if (dateToMonth.length == 1) dateToMonth = "0" + dateToMonth;
+  if (dateToDay.length == 1) dateToDay = "0" + dateToDay;
+  var dataToStr = dateToYear + "-" + dateToMonth + "-" + dateToDay;
+  return dataToStr;
+}
+
+
+// *****************************************************************************************************************************
+// removeDuplicateRowsOnSheet(sheet, column)
+// *****************************************************************************************************************************
+function removeDuplicateRowsOnSheet(sheet, column)
+{
+  var dataValues = sheet.getDataRange().getValues();
+  var limit = dataValues.length-1;
+  
+  for(var i=1; i < limit; i++)
+    {
+    if (i == limit) break;  
+    if ( (dataValues[i][column-1].toString()) == (dataValues[i+1][column-1].toString()) )
+      {
+      sheet.deleteRow(i+2);
+      dataValues = sheet.getDataRange().getValues();
+      limit = dataValues.length-1;      
+      i--;  
+      }
+    }
+  
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// bldCorrespondenceListKPIs(strSource)
+// *****************************************************************************************************************************
+function bldCorrespondenceListKPIs(strSource)
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ruleTemplateSheet = ss.getSheetByName(ruleTemplate);
+  var allDataValues = ruleTemplateSheet.getDataRange().getValues();
+  
+  var arrSource = strSource.split(',');
+  var arrTarget  = arrSource.slice();
+  
+  for (var i=0; i < arrSource.length; i++)
+    for (var j=5; j < allDataValues.length; j++)
+      if (arrSource[i] == allDataValues[j][3])
+        {
+        arrTarget[i] = allDataValues[j][4];
+        break;  
+        }
+  
+  return arrTarget;
+}
+
+
+// *****************************************************************************************************************************
+// bldCorrespondenceListKPIs(strSource)
+// *****************************************************************************************************************************
+function bldCorrespondenceListGroupe(strSource)
+{
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ruleTemplateSheet = ss.getSheetByName(ruleTemplate);
+  var allDataValues = ruleTemplateSheet.getDataRange().getValues();
+  
+  var arrSource = strSource.split(',');
+  var arrTarget  = arrSource.slice();
+  
+  for (i=0; i < arrSource.length; i++)
+    for (j=5; j < allDataValues.length; j++)
+      if (arrSource[i] == allDataValues[j][8])
+        {
+        arrTarget[i] = allDataValues[j][9];
+        break;  
+        }
+  
+  return arrTarget;
+}
+
+
+// *****************************************************************************************************************************
+// createServiceCombinationsArray(qtyGroups, qtyValues)
+// *****************************************************************************************************************************
+function createServiceCombinationsArray(qtyGroups, qtyValues)
+{
+  var tempArr = new Array();
+  for (y=0; y < qtyGroups; y++)
+    tempArr[y] = [];
+  
+  for (var x=0; x < qtyGroups; x++)
+    for (var y=0; y < (qtyValues ** qtyGroups); y++)
+      tempArr[x][y] = ((Math.floor(y/(qtyValues ** x))) % qtyValues);
+    
+  return tempArr;
+}  
+
+
+// *****************************************************************************************************************************
+// isSpreadSheetExist(ID)
+// *****************************************************************************************************************************
+function isSpreadSheetExist(ID)
+{
+  try {
+    var ss = SpreadsheetApp.openById(ID);
+      }
+  catch (err)
+      {
+    return false;
+      }
+  return true;
+}
+
+
+// *****************************************************************************************************************************
+// isSpreadSheetEmpty(ID)
+// *****************************************************************************************************************************
+function isSpreadSheetEmpty(ID)
+{
+  var ss = SpreadsheetApp.openById(ID);
+  var sheets = ss.getSheets();
+  
+  if (sheets.length > 0)
+    var firstSheet = sheets[0].getName();
+  
+  var testDataRange = ss.getSheetByName(firstSheet).getDataRange();
+  var testDataValues = testDataRange.getValues();
+ 
+  var flag = false;
+  if ((testDataValues.length == 1) && (testDataValues[0].length == 1)) flag = true;   
+  
+  return flag;
+}
+
+
+// *****************************************************************************************************************************
+// postProcedureJSONcontent(url)
+// *****************************************************************************************************************************
+function postProcedureJSONcontent(url)
+{
+  var res = UrlFetchApp.fetch(encodeURI(url));
+  var content = res.getContentText();
+  return content;
+}
+
+
+// *****************************************************************************************************************************
+// getJSONraw(url)
+// *****************************************************************************************************************************
+function getJSONraw(url) {
+  var obj = JSONtoObject(url);
+  return obj;
+}
+
+
+// *****************************************************************************************************************************
+// JSONtoObject(url)
+// *****************************************************************************************************************************
+function JSONtoObject(url) {
+  var url = url;                // var url = encodeURI(url);
+  var response = UrlFetchApp.fetch(url);
+  var json = response.getContentText();
+
+  // convert keys to lower case so case insensitive
+  json = json.replace(/"([^"]+)":/g, function($0, $1) {
+    return '"' + $1.toLowerCase() + '":';
+  });
+  
+  var obj = JSON.parse(json);
+
+  if (!Array.isArray(obj)) {
+    obj = [obj];
+  }
+  return obj;
+}
+
+
+// *****************************************************************************************************************************
+// getJSONparse(obj, template, takeNum, filterExpression)
+// *****************************************************************************************************************************
+function getJSONparse(obj, template, takeNum, filterExpression) {
+  obj = filterObject(obj, filterExpression);
+  if (takeNum > 0) obj = obj.slice(0, takeNum);
+  return obj.map(mapRows(template));
+}
+
+
+// *****************************************************************************************************************************
+// filterObject(obj, filterExpression)
+// *****************************************************************************************************************************
+function filterObject(obj, filterExpression) {
+  var obj = obj;
+  if (filterExpression != undefined) {
+    // make lower case
+    filterExpression = filterExpression.replace(/(x.[\w.]+)/g, function(
+      $0,
+      $1
+    ) {
+      return $1.toLowerCase();
+    });
+    eval("var dynamicFilter = function(x) { return " + filterExpression + " }");
+    obj = obj.filter(dynamicFilter);
+  }
+  return obj;
+}
+
+
+// *****************************************************************************************************************************
+// removeDoubleQuotes(s)
+// *****************************************************************************************************************************
+function removeDoubleQuotes(s) {
+  return s.replace(/(^"|"$)/g, '')
+}
+
+
+// *****************************************************************************************************************************
+// getJsonValue(path, obj)
+// *****************************************************************************************************************************
+function getJsonValue(path, obj) {
+  function cleanObjPart(s) {
+    // Handle the case when processing an array element (e.g. "jobs[0]")
+    var re = /(\w+)\s*\[\s*(\d+)\s*\]\s*/;
+    var match = re.exec(s);
+    var objPart;
+    if (match != null) {
+      var elem1 = match[1];
+      var index = parseInt(match[2], 10);
+      objPart = obj[elem1][index];
+    }
+    else {
+      objPart = obj[s];
+    }
+    return objPart;
+  }
+
+  var NOT_FOUND = "notFound";
+  var parts = path.split(/(?!\B"[^"]*)\.(?![^"]*"\B)/);
+  var part;
+  var last = removeDoubleQuotes(parts.pop());
+  while ((part = parts.shift())) {
+    part = removeDoubleQuotes(part);
+    var objPart = cleanObjPart(part);
+    if (typeof objPart != "object") return NOT_FOUND;
+    obj = objPart;
+  }
+
+  var r = cleanObjPart(last);
+  return r === undefined ? NOT_FOUND : r;
+}
+
+
+// *****************************************************************************************************************************
+// mapRows
+// *****************************************************************************************************************************
+// Substitute {{Field1}}, for example, with the value associated with "Field1" in the JSON object.
+var mapRows = function(template) {
+  return function(row) {
+    var result = template.replace(/\{\{\s*(.*?)\s*\}\}/g, function(
+      match,
+      varName
+    ) {
+      // make varName lower case so keys are case insensitive
+      varName = varName.toLowerCase();
+      return getJsonValue(varName, row);
+    });
+
+    var items = result.split(/\s*\|\|\s*/);
+    return items.length == 1 ? items[0] : items;
+  };
+};
+
+
+// *****************************************************************************************************************************
+// myFunction() - "Create a new rule"
+// *****************************************************************************************************************************
+function myFunction() 
+{
+  createRule();
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// myFunctionSecond() - "Run one rule (day before yesterday)"
+// *****************************************************************************************************************************
+function myFunctionSecond()
+{
+  var ui = SpreadsheetApp.getUi();                       
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  if (!isSettingsSheetExist())
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001 + generalSettings + msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  if (!isRuleTemplateSheetExist())
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001 + ruleTemplate + msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  if (!isCompliancesSheetExist())
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001 + compliances + msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  if (isCompliancesSheetEmpty())
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0006+compliances+msgText0007 + nameFirstMenuItem + msgText0008,
+                   ui.ButtonSet.OK
+                   );        
+    return;
+    }
+  
+  var numRuleEntered = Browser.inputBox(msgText0010, Browser.Buttons.OK);
+  // Logger.log(numRuleEntered);
+  if (numRuleEntered == "cancel") return;
+  
+  if (!(isRuleIdInlist(numRuleEntered, 0)))
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0013 + numRuleEntered + msgText0014,
+                   ui.ButtonSet.OK
+                   );        
+    return;
+    }
+  
+  if (!(isRuleActive(numRuleEntered)))
+    {
+    var response = ui.alert(
+                   msgInfoTitle,
+                   msgText0015,
+                   ui.ButtonSet.YES_NO
+                   );   
+    // Logger.log(response);  
+    if (response == "NO") return;
+    }
+  
+  if (getApiToken() == "")
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0016 + generalSettings + msgText0000,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  var now = new Date();
+  
+  var dateToMS = now.getTime() - oneDayMs;
+  var dateFrom1MS = now.getTime() - 2 * oneDayMs;
+  var dateFrom2MS = now.getTime() - 3 * oneDayMs;
+  
+  var dateTo = new Date();
+  var dateFrom1 = new Date();
+  var dateFrom2 = new Date(dateFrom2MS);
+  
+  dateTo.setTime(dateToMS);
+  dateFrom1.setTime(dateFrom1MS);
+  dateFrom2.setTime(dateFrom2MS);
+  
+  dateTo.setHours(12, 0, 0, 0);
+  dateFrom1.setHours(12, 0, 0, 0);
+  dateFrom2.setHours(12, 0, 0, 0);
+  
+  if (runOneRuleExec(numRuleEntered, 0, true, dateFrom2, dateFrom1))
+    if (runOneRuleExec(numRuleEntered, 0, true, dateFrom1, dateTo))
+       ss.toast(msgText0011 + numRuleEntered + msgText0012, msgStatusTitle, 5);  
+  
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// myFunctionThird() - "Run one rule (date range)"
+// *****************************************************************************************************************************
+function myFunctionThird()
+{
+  var ui = SpreadsheetApp.getUi();                       
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  if (!isSettingsSheetExist())
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001 + generalSettings + msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  if (!isRuleTemplateSheetExist())
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001 + ruleTemplate + msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  if (!isCompliancesSheetExist())
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001 + compliances + msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  if (isCompliancesSheetEmpty())
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0006+compliances+msgText0007 + nameFirstMenuItem + msgText0008,
+                   ui.ButtonSet.OK
+                   );        
+    return;
+    }
+  
+  var numRuleEntered = Browser.inputBox(msgText0010, Browser.Buttons.OK);
+  // Logger.log(numRuleEntered);
+  if (numRuleEntered == "cancel") return;
+  
+  if (!(isRuleIdInlist(numRuleEntered, 0)))
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0013 + numRuleEntered + msgText0014,
+                   ui.ButtonSet.OK
+                   );        
+    return;
+    }
+  
+  if (!(isRuleActive(numRuleEntered)))
+    {
+    var response = ui.alert(
+                   msgInfoTitle,
+                   msgText0015,
+                   ui.ButtonSet.YES_NO
+                   );   
+    // Logger.log(response);  
+    if (response == "NO") return;
+    }
+  
+  if (getApiToken() == "")
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0016 + generalSettings + msgText0000,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  var inputCorrectnessBoth = true;
+  for ( ; inputCorrectnessBoth; )
+    {
+    var inputCorrectnessEach = true;
+    for ( ; inputCorrectnessEach; )
+      {
+      var dateFromEntered = Browser.inputBox(msgText0022, msgText0024, Browser.Buttons.OK);
+      // Logger.log(dateFromEntered);
+      if (dateFromEntered == "cancel") return;
+    
+      var stringDate = dateFromEntered.split ('-'); 
+      // Logger.log(stringDate);  
+      
+      var myYear = parseInt(stringDate[0]);
+      var myMonth = parseInt(stringDate[1]) - 1;
+      var myDay = parseInt(stringDate[2]);
+      
+      var dateFromUserEntered = new Date (myYear, myMonth, myDay);
+    
+      var testDay = dateFromUserEntered.getDate();
+      var testMonth = dateFromUserEntered.getMonth();
+      var testYear = dateFromUserEntered.getFullYear();
+      
+      if ((testDay == myDay) && (testMonth == myMonth) && (testYear == myYear)) 
+        {
+        dateFromUserEntered.setHours(12, 0, 0, 0);
+        inputCorrectnessEach = false;
+        }
+      else
+        {
+        var response = ui.alert(
+                       msgErrorTitle,
+                       msgText0019,
+                       ui.ButtonSet.OK
+                       );    
+        }
+      }
+    // Logger.log(dateFromUserEntered);  
+  
+    inputCorrectnessEach = true;
+    for ( ; inputCorrectnessEach; )
+      {
+      var dateToEntered = Browser.inputBox(msgText0023, msgText0024, Browser.Buttons.OK);
+      // Logger.log(dateToEntered);
+      if (dateToEntered == "cancel") return;
+      
+      var stringDate = dateToEntered.split ('-');
+      // Logger.log(stringDate);  
+      
+      var myYear = parseInt(stringDate[0]);
+      var myMonth = parseInt(stringDate[1]) - 1;
+      var myDay = parseInt(stringDate[2]);
+      
+      var dateToUserEntered = new Date (myYear, myMonth, myDay);
+    
+      var testDay = dateToUserEntered.getDate();
+      var testMonth = dateToUserEntered.getMonth();
+      var testYear = dateToUserEntered.getFullYear();
+      
+      if ((testDay == myDay) && (testMonth == myMonth) && (testYear == myYear)) 
+        {
+        dateToUserEntered.setHours(12, 0, 0, 0);
+        inputCorrectnessEach = false;
+        }
+      else
+        {
+        var response = ui.alert(
+                       msgErrorTitle,
+                       msgText0019,
+                       ui.ButtonSet.OK
+                       );    
+        }
+      }
+    // Logger.log(dateToUserEntered);  
+    
+    // Checks entered dates for logical meaning. 
+    // The "TO" must be at least 2 days less than the "TODAY" date, and the "FROM" must be less than "TO".
+      
+    var now = new Date();
+    now.setHours(12, 0, 0, 0);
+    var nowMS = now.getTime();
+    var fromMS = dateFromUserEntered.getTime();
+    var toMS = dateToUserEntered.getTime(); 
+    
+    if((nowMS - toMS) < (2 * oneDayMs))
+      {
+      var response = ui.alert(
+                     msgErrorTitle,
+                     msgText0020,
+                     ui.ButtonSet.OK
+                     );    
+       continue;     
+      } 
+      
+    if((toMS - fromMS) < oneDayMs)
+      {
+      var response = ui.alert(
+                     msgErrorTitle,
+                     msgText0021,
+                     ui.ButtonSet.OK
+                     );    
+       continue;     
+      }   
+      
+  inputCorrectnessBoth = false;    
+  }  
+  
+  var dateToInMS = dateToUserEntered.getTime();
+  var dateFromInMS = dateFromUserEntered.getTime();
+  
+  var diffInDays = parseInt( (dateToInMS - dateFromInMS) / oneDayMs );
+  // Logger.log(dateFromUserEntered);  
+  // Logger.log(dateToUserEntered);  
+  // Logger.log(diffInDays);
+
+  var startDate = new Date();
+  var endDate = new Date();
+
+  var execStatus = true;
+    
+  for(var i=0; i < diffInDays; i++)
+    { 
+    startDate.setTime(dateFromInMS + i * oneDayMs);
+    endDate.setTime(dateFromInMS + (i+1) * oneDayMs); 
+
+    if (!(runOneRuleExec(numRuleEntered, 0, true, startDate, endDate))) execStatus = false;
+      
+    // Logger.log(startDate);
+    // Logger.log(endDate);
+    }
+
+  if (execStatus)
+    ss.toast(msgText0011 + numRuleEntered + msgText0012, msgStatusTitle, 5); 
+  else
+    ss.toast(msgText0025 + numRuleEntered + msgText0026, msgErrorTitle, 5); 
+  
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// myFunctionFourth()  - Send message to channel
+// *****************************************************************************************************************************
+function myFunctionFourth()
+{
+  var message = Browser.inputBox(msgText0028, Browser.Buttons.OK);
+  // Logger.log(numRuleEntered);
+  if (message == "cancel") return;
+  sendMessageToChannel(message,0);
+}
+
+
+// *****************************************************************************************************************************
+// myFunctionFifth() - Create a new link between rule and robot
+// *****************************************************************************************************************************
+function myFunctionFifth()
+{
+  var ui = SpreadsheetApp.getUi();                       
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  if (!(isListOfRobotsSheetExist()))
+    { 
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001+listOfRobots+msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  var listMathsRobotsSheet = ss.getSheetByName(listOfRobots);
+  
+  if (!(isCompliancesSheetExist()))
+    { 
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001+compliances+msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+   if (!(isRobotBindingsSheetExist()))
+    { 
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001+robotBindings+msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  var robotBindingsSheet = ss.getSheetByName(robotBindings);
+  
+  var activeSheetName = ss.getActiveSheet().getName();
+  if (!(activeSheetName == compliances))
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0029+compliances+msgText0030,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+    
+  var currentCell = ss.getActiveCell();
+  var currentCellValue = currentCell.getValue();
+  
+  var currentColumn = currentCell.getColumn();
+  if (currentColumn != 2)
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0029+compliances+msgText0030,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  if (listMathsRobotsSheet.getDataRange().getHeight() < 3)
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0031+listOfRobots+msgText0032,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+
+  var numOfRobot = Browser.inputBox(msgText0033, Browser.Buttons.OK);
+  // Logger.log(numOfRobot);
+  if (numOfRobot == "cancel") return;
+  
+  var listOfRobotsValues = listMathsRobotsSheet.getDataRange().getValues();
+  
+  for (var i=2; i<listMathsRobotsSheet.getDataRange().getHeight(); i++)
+    if(listOfRobotsValues[i][1].toString() == numOfRobot.toString())
+       break;
+
+  if (i == listMathsRobotsSheet.getDataRange().getHeight())
+    {
+    var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0035 + numOfRobot + msgText0036 + listOfRobots + msgText0032,
+                   ui.ButtonSet.OK
+                   );    
+    return;
+    }
+  
+  var descr = listOfRobotsValues[i][2].toString();
+
+  var robotBindingsValues = robotBindingsSheet.getDataRange().getValues();
+  
+  for(var j=2; j < robotBindingsValues.length; j++)
+    if (robotBindingsValues[j][2].toString() == currentCellValue.toString()  )
+       if (robotBindingsValues[j][1].toString() == numOfRobot.toString()  )
+         {
+         var response = ui.alert(
+                        msgErrorTitle,
+                        msgText0037 + numOfRobot + msgText0038 + currentCellValue + msgText0039,
+                        ui.ButtonSet.OK
+                        );    
+         return;
+         }         
+  var numRow = robotBindingsValues.length;
+
+  var robotBindingsWorkRange = robotBindingsSheet.getRange(1, 1, numRow + 1, 6);
+  var robotBindingsWorkRangeValues = robotBindingsWorkRange.getValues();
+  
+  robotBindingsWorkRangeValues[numRow][1] = numOfRobot; 
+  robotBindingsWorkRangeValues[numRow][2] = currentCellValue;
+  robotBindingsWorkRangeValues[numRow][3] = true;
+  robotBindingsWorkRangeValues[numRow][5] = descr;
+  
+  robotBindingsWorkRange.setValues(robotBindingsWorkRangeValues);
+  
+  robotBindingsWorkRange.getCell(numRow + 1, 4).insertCheckboxes();
+  robotBindingsWorkRange.getCell(numRow + 1, 5).setNumberFormat("yyyy-MM-dd HH:mm:ss");
+  
+  ss.toast(msgText0034, msgStatusTitle, 4);
+  
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// myFunctionSixth() - Manual start Mathematical Robots
+// *****************************************************************************************************************************
+function myFunctionSixth()
+{
+   algorithmicRobotsExec(0);
+}
+
+
+// *****************************************************************************************************************************
+// importJSON(url)
+// *****************************************************************************************************************************
+function importJSON(url)
+{
+  var res = UrlFetchApp.fetch(url);
+  var content = res.getContentText();
+  var json = JSON.parse(content);
+  return json;
+}
+
+
+// *****************************************************************************************************************************
+// parsingJSON(json,xpath)
+// *****************************************************************************************************************************
+function parsingJSON(json,xpath)
+{
+  var patharray = xpath.split("/");
+  //Logger.log(patharray);
+  
+  try 
+    {
+    for(var i=0;i<patharray.length;i++)
+      json = json[patharray[i]];
+    //Logger.log(typeof(json));
+    }
+  catch(err) 
+    {
+    return "Error";
+    }
+    
+  if(typeof(json) === "undefined")
+    return "Node Not Available";
+     
+  else if(typeof(json) === "object")
+    {
+    var tempArr = [];
+      
+    for(var obj in json)
+      tempArr.push([obj,json[obj]]);
+      
+    return tempArr;
+    } 
+  else if(typeof(json) !== "object") 
+    {
+    return json;
+    }
+}
+
+
+// *****************************************************************************************************************************
+// scheduledRobotsManager()
+// *****************************************************************************************************************************
+function scheduledRobotsManager()
+{
+  algorithmicRobotsExec(1);
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// scheduledLaunchManager()
+// *****************************************************************************************************************************
+function scheduledLaunchManager()
+{
+  var startTimeLancher = new Date();
+  var startTimeLancherMS = startTimeLancher.getTime();
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var CompliancesSheet = ss.getSheetByName(compliances);
+  if (CompliancesSheet == null)
+    {   // Sheet "Compliances" not found in the Spreadsheet 
+        // ToDo: Write here code for writing this error to the errors log.     
+    return false;
+    }
+
+  var workDataRange = CompliancesSheet.getDataRange();
+  var workDataRangeValues = workDataRange.getValues();
+
+  var now = new Date();
+  var nowMS = now.getTime();  
+  // Logger.log(now);
+  // Logger.log(nowMS);
+  
+  var dateToMS = now.getTime() - oneDayMs;
+  var dateFrom1MS = now.getTime() - 2 * oneDayMs;
+  var dateFrom2MS = now.getTime() - 3 * oneDayMs;
+  
+  var dateTo = new Date();
+  var dateFrom1 = new Date();
+  var dateFrom2 = new Date(dateFrom2MS);
+  
+  dateTo.setTime(dateToMS);
+  dateFrom1.setTime(dateFrom1MS);
+  dateFrom2.setTime(dateFrom2MS);
+  
+  dateTo.setHours(12, 0, 0, 0);
+  dateFrom1.setHours(12, 0, 0, 0);
+  dateFrom2.setHours(12, 0, 0, 0);
+  
+  for(var i=2; i < workDataRangeValues.length; i++)
+    {
+    var startTimeCycle = new Date();
+    var startTimeCycleMS = startTimeCycle.getTime();
+      
+    var currentRuleId = workDataRangeValues[i][1].toString();
+    // Logger.log(currentRuleId);
+
+    var currentRuleStatus = workDataRangeValues[i][6];
+    // Logger.log(currentRuleStatus);
+      
+    var lastCompletionTime = workDataRangeValues[i][11];
+    var lastCompletionTimeMS = lastCompletionTime.getTime();
+    // Logger.log(lastCompletionTime);  
+    // Logger.log(lastCompletionTimeMS);    
+      
+    var fileID = workDataRangeValues[i][9]; 
+    // Logger.log(fileID);  
+      
+    var halfDoneFlag = workDataRangeValues[i][13].toString();
+    
+    if (!currentRuleStatus) continue;  
+      
+    if (!(halfDoneFlag == "+"))
+        {
+        // Logger.log("There is an analysis of the time of the last execution");
+        if ((nowMS - lastCompletionTimeMS) < oneDayMs) continue;
+        } 
+  
+    if (!(halfDoneFlag == "+"))
+      {  
+      // first day processing - START
+      if (!runOneRuleExec(currentRuleId, 1, true, dateFrom2, dateFrom1))
+        {   // Errors occurred while fetching or parsing data 
+            // ToDo: Write here code for writing this error to the errors log.     
+        return false;
+        }
+
+      var currentTime = new Date();
+      var currentTimeMS = currentTime.getTime();
+      var durationOfHalfRuleMS = currentTimeMS - startTimeCycleMS;
+  
+      workDataRangeValues[i][13] = "+";
+        
+      var usedFile = DriveApp.getFileById(fileID);
+      workDataRangeValues[i][11] = usedFile.getLastUpdated(); 
+      workDataRange.setValues(workDataRangeValues);
+    
+      if (durationOfHalfRuleMS > 14 * oneMinMs)
+        {   // The script will not be able to execute completely and will be terminated by Google abnormally 
+            // ToDo: Write here code for writing this error to the errors log.     
+        return false;
+        }
+      // first day processing  - END
+      }
+
+    // second day processing - START
+    if (!runOneRuleExec(currentRuleId, 1, true, dateFrom1, dateTo))
+      {   // Errors occurred while fetching or parsing data 
+          // ToDo: Write here code for writing this error to the errors log.     
+      return false;
+      }
+
+    var currentTime = new Date();
+    var currentTimeMS = currentTime.getTime();
+    var durationOfHalfRuleMS = currentTimeMS - startTimeLancherMS;
+      
+    workDataRangeValues[i][13] = "";
+      
+    var usedFile = DriveApp.getFileById(fileID);
+    workDataRangeValues[i][11] = usedFile.getLastUpdated(); 
+    workDataRange.setValues(workDataRangeValues);
+    
+    if (durationOfHalfRuleMS > 28 * oneMinMs)
+      {   // The script will not be able more execute completely and will be terminated by Google abnormally 
+          // ToDo: Write here code for writing this error to the errors log.     
+      return false;
+      }
+    // second day processing - END  
+    
+    // Logger.log("Rule processing completed");
+    }
+}
+
+
+// *****************************************************************************************************************************
+// getChatToken(typeOfExec)  typeOfExec = 0 (manual) or 1 (scheduled) 
+// *****************************************************************************************************************************
+function getChatToken(typeOfExec)
+{
+  var chatToken = "";
+  
+  if (typeOfExec == 0) 
+    var ui = SpreadsheetApp.getUi();                       
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  if (!isSettingsSheetExist())
+    if (typeOfExec == 0)
+      {
+      var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001 + generalSettings + msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    
+      return chatToken;
+      }
+    else
+      {    
+        // Sheet "GeneralSettings" not found in the Spreadsheet 
+        // ToDo: Write here code for writing this error to the errors log.    
+      return chatToken;
+      }
+    
+  var SettingsSheet = ss.getSheetByName(generalSettings);
+  chatToken = SettingsSheet.getRange(apiChatTokenCellName).getValue().toString();
+  // Logger.log(chatToken);
+
+  return chatToken;
+}
+
+
+// *****************************************************************************************************************************
+// getChatChannelName(typeOfExec)  typeOfExec = 0 (manual) or 1 (scheduled) 
+// *****************************************************************************************************************************
+function getChatChannelName(typeOfExec)
+{
+  var chatChannelName = "";
+  
+  if (typeOfExec == 0) 
+    var ui = SpreadsheetApp.getUi();                       
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  if (!isSettingsSheetExist())
+    if (typeOfExec == 0)
+      {
+      var response = ui.alert(
+                   msgErrorTitle,
+                   msgText0001 + generalSettings + msgText0002,
+                   ui.ButtonSet.OK
+                   );    
+    
+      return chatChannelName;
+      }
+    else
+      {    
+        // Sheet "GeneralSettings" not found in the Spreadsheet 
+        // ToDo: Write here code for writing this error to the errors log.    
+      return chatChannelName;
+      }
+    
+  var SettingsSheet = ss.getSheetByName(generalSettings);
+  chatChannelName = SettingsSheet.getRange(channelNameCellName).getValue().toString();
+  // Logger.log(chatChannelName);
+
+  return chatChannelName;
+}
+
+
+// *****************************************************************************************************************************
+// sendMessageToChannel(message, typeOfExec)   typeOfExec = 0 (manual) or 1 (scheduled)
+// *****************************************************************************************************************************
+function sendMessageToChannel(message, typeOfExec)
+{
+  var isOk = true;
+  var apiToken = getChatToken(typeOfExec);
+  var channelName = getChatChannelName(typeOfExec);
+  Logger.log(message)
+//Logger.log(apiToken+channelName)
+  if ((apiToken == "") || (channelName == ""))
+    {
+    // Sheet "GeneralSettings" not found in the Spreadsheet 
+    // ToDo: Write here code for writing this error to the errors log.    
+    return false;
+    }
+
+  var urlRequest = urlToSlackAPI + cmdPostMessage + "token=" + apiToken + "&channel=" + channelName + "&text=" + message;
+  // Logger.log(urlRequest);
+  //Logger.log(urlRequest+apiToken+channelName)
+  if (typeOfExec == 0) 
+    var ui = SpreadsheetApp.getUi();                       
+  
+  try                  // request to API
+    {
+    var obj = postProcedureJSONcontent(urlRequest);
+    }
+  catch(err)
+    {
+    haveError = true; 
+    Logger.log(err.name);  
+    Logger.log(err.message);
+    Logger.log(err.stack);
+           
+    if (typeOfExec == 0)
+      {
+      var response = ui.alert(
+                     msgErrorTitle,
+                     msgText0027,
+                     ui.ButtonSet.OK
+                     );
+      }  
+    return;
+    }
+  // Logger.log(obj);
+  
+  var results = obj.split(",");
+  var result = results[0].slice(1);
+  
+  if (result.includes('true'))
+    isOk = true;
+  else
+    isOk = false;
+  
+  return isOk;
+}
+
+
+// *****************************************************************************************************************************
+// algorithmicRobotsExec(typeOfExec)   typeOfExec = 0 (manual) or 1 (scheduled)
+// *****************************************************************************************************************************
+function algorithmicRobotsExec(typeOfExec)
+{
+  var startTimeLancher = new Date();
+  var startTimeLancherMS = startTimeLancher.getTime();
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  
+  if(!isRobotBindingsSheetExist())
+    {
+    // Sheet "RobotBindings" not found in the Spreadsheet 
+    // ToDo: Write here code for writing this error to the errors log.         
+      
+    return false;
+    }
+  
+  if (!isCompliancesSheetExist())
+    {
+    // Sheet "Compliances" not found in the Spreadsheet 
+    // ToDo: Write here code for writing this error to the errors log.     
+    
+    return false;
+    }
+  
+  var robotBindingsSheet = ss.getSheetByName(robotBindings);
+  var robotBindingsDataRange = robotBindingsSheet.getDataRange();
+  var robotBindingsDataRangeValues = robotBindingsDataRange.getValues();
+  
+  if (robotBindingsDataRangeValues.length < 3)
+    {
+    // No binding of robots to rules 
+    // ToDo: Write here code for writing this error to the errors log.     
+      
+    return false;
+    }
+  
+  var durationOfCyclesMS = 0;
+  var startTimeCyclesMS = 0;
+  
+  for (var i=2; i<robotBindingsDataRangeValues.length; i++)
+    {
+    var startTimeCycle = new Date();
+    var startTimeCycleMS = startTimeCycle.getTime();  
+    if (i==2) startTimeCyclesMS = startTimeCycleMS;
+      
+    var robotNum = parseInt(robotBindingsDataRangeValues[i][1]);
+    var ruleID = robotBindingsDataRangeValues[i][2].toString();
+    var isActive = robotBindingsDataRangeValues[i][3];
+    var lastTimeRun = robotBindingsDataRangeValues[i][4];   
+
+    // Logger.log(robotNum);
+    // Logger.log(ruleID);
+    // Logger.log(isActive);  
+    // Logger.log(lastTimeRun);
+      
+    if (!(lastTimeRun.toString() == ""))
+      var lastTimeRun = new Date(robotBindingsDataRangeValues[i][4]);
+    else
+      var lastTimeRun = "";
+    
+    if (!isActive) continue;
+
+    if (!(lastTimeRun.toString() == ""))
+      if (!(isMoreThanDayHasPassed(lastTimeRun)))
+       continue; 
+      
+       
+    if (!isRuleIdInlist(ruleID, 1)) 
+      {
+      // The rule is not in the list of rules 
+      // ToDo: Write here code for writing this error to the errors log.         
+      // Logger.log("The rule is not in the list of rules");  
+      continue;
+      } 
+
+    if (!(lastTimeRun.toString() == "")) 
+      var lastTimeRunMS = lastTimeRun.getTime();
+    else
+      var lastTimeRunMS = 0;
+      
+    var posRule = posRuleIdInlist(ruleID);
+    var spreadsheetID = getSpreadsheetID(posRule);
+    var appID = getAppID(posRule);  
+    var lastModified = getLastModified(posRule);
+    var spreadsheetUrl = getSpreadsheetURL(posRule);
+      
+    var lastModifiedMS = lastModified.getTime();
+     
+    if (lastModifiedMS < lastTimeRunMS) continue;  // already worked out 
+      
+    // Logger.log(posRule);
+    // Logger.log(spreadsheetID);  
+    // Logger.log(lastTimeRun);
+    // Logger.log(lastTimeRunMS);
+    // Logger.log(lastModified);
+    // Logger.log(lastModifiedMS);
+      Logger.log("Robots!");
+      
+    robotFunctionsArr[robotNum-1](spreadsheetID, appID, spreadsheetUrl);    // Calling a function of the corresponding robot !!!  
+
+    robotBindingsDataRangeValues[i][4] = new Date();
+    robotBindingsDataRange.setValues(robotBindingsDataRangeValues);  
+      
+    var currentTime = new Date();
+    var currentTimeMS = currentTime.getTime();
+    var durationOfCycleMS = currentTimeMS - startTimeCycleMS;
+    durationOfCyclesMS = durationOfCyclesMS + durationOfCycleMS;
+      
+    if ((startTimeCyclesMS - startTimeLancherMS) + durationOfCyclesMS > 23 * oneMinMs) break;  
+      
+    }
+  return true;
+}
+
+
+// *****************************************************************************************************************************
+// *****************************************************************************************************************************
+// 
+//                                                    ROBOTS FUCTIONS
+// 
+// *****************************************************************************************************************************
+// *****************************************************************************************************************************
+
+// *****************************************************************************************************************************
+// If Average eCPI is +/- 20% vs. last 7 days average, notify me.
+// *****************************************************************************************************************************
+function robot001(spreadsheetID, appID, url)
+{
+  const eCPI = "Average eCPI";
+  const errMsg0000 = "  :warning: Warning: ";
+  const errMsg0001 = "\nSheet '";
+  //const errMsg0002 = "' contains less than 8 records!"; 
+  const errMsg0003 = "\nOnly ";
+  const errMsg0004 = " records available.";
+  const errMsg0005 = "' has eCPI value less than the lower bound!";
+  const errMsg0006 = "\nLower bound: ";
+  const errMsg0007 = "\nCurrent value: ";
+  const errMsg0008 = " \nAverage value: ";
+  const errMsg0009 = "' has eCPI value more than the upper bound!";
+  const errMsg0010 = "\nUpper bound: ";
+  const errMsg0011 = "\nSpreadsheet has average eCPI value less than the lower bound!";
+  const errMsg0012 = "\nSpreadsheet has average eCPI value more than the upper bound!";
+  
+  var title = "*AppID:* " + appID + "\n*SpreadsheetID:* " + "<" + url + "|" +spreadsheetID+">";
+  var now = new Date();
+  var expectedDateStr = dateFrom(now);
+  
+  var ss = SpreadsheetApp.openById(spreadsheetID);
+  var qtySheets = ss.getNumSheets();
+  
+  Logger.log("Robot 1 launched");
+  
+  // Logger.log("App ID: " + appID + ", Spreadsheet ID: " + spreadsheetID + ", QTY Sheets: " + qtySheets);
+  // Logger.log("Expected date: " + expectedDateStr);
+  // Logger.log("");
+
+  var tempSheet =  ss.getSheets()[0];
+  var tempDataRange = tempSheet.getDataRange();
+  var tempDataRangeValues = tempDataRange.getValues();
+  
+  var pos = tempDataRangeValues[0].indexOf(eCPI);
+  
+  let notice = [];
+  notice[0] = title; 
+  
+  var totalRangeCounter = new Array();
+  var totalCurrCounter = new Array();
+     
+  for (var i=0; i < qtySheets; i++)
+    {
+    var counter = new Array();
+      
+    var workSheet =  ss.getSheets()[i];
+    var workSheetName = workSheet.getName();  
+    var workSheetName = workSheetName.replace(new RegExp("%",'g'),"");
+      
+    var workDataRange = workSheet.getDataRange();
+    var workDataRangeValues = workDataRange.getValues();
+    var height = workDataRange.getHeight();  
+    var qtyRecords = height-1; 
+      
+    var startPos = 0; 
+    
+ // below is the "Warning less than 8 records" message    
+      
+    if(qtyRecords < 8)
+      {
+      startPos = 1; 
+      //var tempStr = errMsg0000 + errMsg0001 +"`"+ workSheetName +"`"+ /*errMsg0002 +*/ errMsg0003 +"`"+ qtyRecords +"`"+ errMsg0004;
+      // Logger.log(tempStr);
+      //notice.push(tempStr);
+      }
+    else
+      startPos = height - 8;
+    
+    for(var q = startPos; q < height-1; q++)                    // count the average eCPI 
+      {
+       var t = parseFloat(workDataRangeValues[q][pos]);  
+       counter.push(t);
+       totalRangeCounter.push(t); 
+      }
+      
+    var curr = parseFloat(workDataRangeValues[qtyRecords][pos]);  
+    totalCurrCounter.push(curr);   
+      
+    if (counter.length > 0)  
+      var avvr = counter.reduce((a, b) => (a + b)) / counter.length; 
+    else
+      var avvr = 0;
+    var lowerBorder = 0.8 * avvr;
+    var upperBorder = 1.2 * avvr;
+    
+    // Logger.log("Averr=" + avvr);        
+    // Logger.log("Low: " + lowerBorder);  
+    // Logger.log("Upp: " + upperBorder);    
+    // Logger.log("Cur: " + curr);  
+      
+    var avvrToShow = avvr.toFixed(4);
+    var lbToShow = lowerBorder.toFixed(4);
+    var ubToShow = upperBorder.toFixed(4);
+    var currToShow = curr.toFixed(4);  
+      
+    if (curr < lowerBorder)
+      {
+      var tempStr = errMsg0000 + errMsg0001 + workSheetName + errMsg0005 + errMsg0008 +"`"+ avvrToShow +"`"+ errMsg0006 +"`"+ lbToShow +"`"+ errMsg0007 +"`"+ currToShow+"`";
+     // var tempStr = errMsg0000 + errMsg0001 + workSheetName + errMsg0005 + errMsg0008+ avvrToShow + errMsg0006 + lbToShow + errMsg0007 + currToShow;
+      
+        // Logger.log(tempStr);
+      notice.push(tempStr);
+      }
+      
+    if (curr > upperBorder)
+      {
+      var tempStr = errMsg0000 + errMsg0001 + workSheetName + errMsg0009 + errMsg0008 +"`"+ avvrToShow +"`"+ errMsg0010 +"`"+ ubToShow +"`"+ errMsg0007 +"`"+ currToShow+"`";
+      //var tempStr = errMsg0000 + errMsg0001 + workSheetName + errMsg0009 + errMsg0008 + avvrToShow + errMsg0010 + ubToShow + errMsg0007 + currToShow;
+      
+        // Logger.log(tempStr);
+      notice.push(tempStr);
+      }
+    }
+
+  if (totalRangeCounter.length > 0)  
+    var avvrTotalRangeCounter = totalRangeCounter.reduce((a, b) => (a + b)) / totalRangeCounter.length; 
+  else
+    var avvrTotalRangeCounter = 0;
+  
+  if (totalCurrCounter.length > 0)  
+    var avvrTotalCurrCounter = totalCurrCounter.reduce((a, b) => (a + b)) / totalCurrCounter.length;   
+  else
+    var avvrTotalCurrCounter = 0;
+  
+  var lowerBorderTotal = 0.8 * avvrTotalRangeCounter;
+  var upperBorderTotal = 1.2 * avvrTotalRangeCounter;
+  
+  var avvrTotalRangeCounterToShow = avvrTotalRangeCounter.toFixed(4);
+  var avvrTotalCurrCounterToShow = avvrTotalCurrCounter.toFixed(4);
+  var lowerBorderTotalToShow = lowerBorderTotal.toFixed(4);
+  var upperBorderTotalToShow = upperBorderTotal.toFixed(4);  
+  
+  if (avvrTotalCurrCounter < lowerBorderTotal)
+    {
+    var tempStr = errMsg0000 + errMsg0011 + errMsg0008 +"`"+ avvrTotalRangeCounterToShow +"`"+ errMsg0006 +"`"+ lowerBorderTotalToShow +"`"+ errMsg0007 +"`"+ avvrTotalCurrCounterToShow +"`";
+    // Logger.log(tempStr);
+    notice.push(tempStr);
+    }
+      
+  if (avvrTotalCurrCounter > upperBorderTotal)
+    {
+    var tempStr = errMsg0000 + errMsg0012 + errMsg0008 +"`"+ avvrTotalRangeCounterToShow +"`"+ errMsg0010 +"`"+ upperBorderTotalToShow +"`"+ errMsg0007 +"`"+ avvrTotalCurrCounterToShow +"`";
+    // Logger.log(tempStr);
+    notice.push(tempStr);
+    }
+  
+  // Logger.log(notice);
+  if (notice.length > 1)
+    for (var j=0; j < notice.length; j++)
+      {
+      Logger.log(notice[j]);                 // delay !!!
+      sendMessageToChannel(notice[j], 1);
+      }
+
+  // Logger.log(totalRangeCounter);
+  // Logger.log(totalCurrCounter);
+
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// If CTR is +/- 0.005 vs. last 7 days average, notify me.
+//(in this case, I mean if CTR average is 0.02 and it changes to ≥0.025 or ≤0.015, notify me)
+// *****************************************************************************************************************************
+function robot002(spreadsheetID, appID, url)
+{
+  const CTR = "CTR";
+  
+  const errMsg0000 = "  :warning: Warning: ";
+  const errMsg0001 = "\nSheet '";
+  //const errMsg0002 = "' contains less than 8 records!"; 
+  const errMsg0003 = "\nOnly ";
+  const errMsg0004 = " records available.";
+  const errMsg0005 = "' has CTR value less than the lower bound!";
+  const errMsg0006 = "\nLower bound: ";
+  const errMsg0007 = "\nCurrent value: ";
+  const errMsg0008 = " \nAverage value: ";
+  const errMsg0009 = "' has CTR value more than the upper bound!";
+  const errMsg0010 = "\nUpper bound: ";
+  const errMsg0011 = "\nSpreadsheet has average CTR value less than the lower bound!";
+  const errMsg0012 = "\nSpreadsheet has average CTR value more than the upper bound!";
+  
+ var title = "*AppID:* " + appID + "\n*SpreadsheetID:* " + "<" + url + "|" +spreadsheetID+">";
+  var now = new Date();
+  var expectedDateStr = dateFrom(now);
+  
+  var ss = SpreadsheetApp.openById(spreadsheetID);
+  var qtySheets = ss.getNumSheets();
+  
+  Logger.log("Robot 2 launched");
+  
+  // Logger.log("App ID: " + appID + ", Spreadsheet ID: " + spreadsheetID + ", QTY Sheets: " + qtySheets);
+  // Logger.log("Expected date: " + expectedDateStr);
+  // Logger.log("");
+
+  var tempSheet =  ss.getSheets()[0];
+  var tempDataRange = tempSheet.getDataRange();
+  var tempDataRangeValues = tempDataRange.getValues();
+  
+  var pos = tempDataRangeValues[0].indexOf(CTR);
+  
+  let notice = [];
+  notice[0] = title; 
+  
+  var totalRangeCounter = new Array();
+  var totalCurrCounter = new Array();
+     
+  for (var i=0; i < qtySheets; i++)
+    {
+    var counter = new Array();
+      
+    var workSheet =  ss.getSheets()[i];
+    var workSheetName = workSheet.getName();  
+    var workSheetName = workSheetName.replace(new RegExp("%",'g'),"");
+      
+    var workDataRange = workSheet.getDataRange();
+    var workDataRangeValues = workDataRange.getValues();
+    var height = workDataRange.getHeight();  
+    var qtyRecords = height-1; 
+      
+    var startPos = 0; 
+  
+ // below is the "Warning less than 8 records" message     
+      
+    if(qtyRecords < 8)
+      {
+      startPos = 1; 
+     // var tempStr = errMsg0000 + errMsg0001 +"`"+ workSheetName /*+ errMsg0002*/ +"`"+ errMsg0003 +"`"+ qtyRecords +"`"+ errMsg0004;
+      // Logger.log(tempStr);
+      //notice.push(tempStr);
+      }
+    else
+      startPos = height - 8;
+    
+    for(var q = startPos; q < height-1; q++)                    // count the CTR is +/- 0.005 vs. last 7 days 
+      {
+       var t = parseFloat(workDataRangeValues[q][pos]);  
+       if (t == Infinity) t = 1; 
+       if (t == NaN) t = 0; 
+       // Logger.log(t);
+       counter.push(t);
+       totalRangeCounter.push(t); 
+      }
+      
+    var curr = parseFloat(workDataRangeValues[qtyRecords][pos]);  
+    if (curr == Infinity) curr = 1;  
+    if (curr == NaN) curr = 0;  
+    totalCurrCounter.push(curr);   
+    
+      
+    if (counter.length > 0)  
+      {
+      var avvr = counter.reduce((a, b) => (a + b)) / counter.length; 
+      var lowerBorder = avvr - 0.0050;
+      var upperBorder = avvr + 0.0050;
+      }
+    else
+      {
+      var avvr = 0;
+      var lowerBorder = 0;
+      var upperBorder = 0;
+      }
+    
+    // Logger.log("Averr=" + avvr);        
+    // Logger.log("Low: " + lowerBorder);  
+    // Logger.log("Upp: " + upperBorder);    
+    // Logger.log("Cur: " + curr);  
+      
+    var avvrToShow = avvr.toFixed(5);
+    var lbToShow = lowerBorder.toFixed(5);
+    var ubToShow = upperBorder.toFixed(5);
+    var currToShow = curr.toFixed(5);  
+      
+    if (curr < lowerBorder)
+      {
+      var tempStr = errMsg0000 + errMsg0001 + workSheetName + errMsg0005 + errMsg0008 +"`"+ avvrToShow +"`"+ errMsg0006 +"`"+ lbToShow +"`"+ errMsg0007 +"`"+ currToShow +"`";
+      // Logger.log(tempStr);
+      notice.push(tempStr);
+      }
+      
+    if (curr > upperBorder)
+      {
+      var tempStr = errMsg0000 + errMsg0001 + workSheetName + errMsg0009 + errMsg0008 +"`"+ avvrToShow +"`"+ errMsg0010 +"`"+ ubToShow +"`"+ errMsg0007 +"`"+ currToShow +"`";
+      // Logger.log(tempStr);
+      notice.push(tempStr);
+      }
+  }
+
+  if (totalRangeCounter.length > 0)  
+    {
+    var avvrTotalRangeCounter = totalRangeCounter.reduce((a, b) => (a + b)) / totalRangeCounter.length; 
+    var lowerBorderTotal = avvrTotalRangeCounter - 0.0050;
+    if (lowerBorderTotal < 0)  lowerBorderTotal = 0;
+    var upperBorderTotal = avvrTotalRangeCounter + 0.0050;
+    }
+  else
+    {
+    var avvrTotalRangeCounter = 0;
+    var upperBorderTotal = 0;
+    var lowerBorderTotal = 0;
+    }
+  
+  if (totalCurrCounter.length > 0)  
+    var avvrTotalCurrCounter = totalCurrCounter.reduce((a, b) => (a + b)) / totalCurrCounter.length;   
+  else
+    var avvrTotalCurrCounter = 0;
+  
+  
+  var avvrTotalRangeCounterToShow = avvrTotalRangeCounter.toFixed(5);
+  var avvrTotalCurrCounterToShow = avvrTotalCurrCounter.toFixed(5);
+  var lowerBorderTotalToShow = lowerBorderTotal.toFixed(5);
+  var upperBorderTotalToShow = upperBorderTotal.toFixed(5);  
+  
+  // Logger.log("Total Avv =" + avvrTotalRangeCounterToShow);
+  // Logger.log("Curr Avv =" + avvrTotalCurrCounterToShow);
+  // Logger.log("Low =" + lowerBorderTotalToShow);
+  // Logger.log("Upp =" + upperBorderTotalToShow);
+  
+  if (avvrTotalCurrCounter < lowerBorderTotal)
+    {
+    var tempStr = errMsg0000 + errMsg0011 + errMsg0008 +"`"+ avvrTotalRangeCounterToShow +"`"+ errMsg0006 +"`"+ lowerBorderTotalToShow +"`"+ errMsg0007 +"`"+ avvrTotalCurrCounterToShow+"`";
+    // Logger.log(tempStr);
+    notice.push(tempStr);
+    }
+      
+  if (avvrTotalCurrCounter > upperBorderTotal)
+    {
+    var tempStr = errMsg0000 + errMsg0012 + errMsg0008 +"`"+ avvrTotalRangeCounterToShow +"`"+ errMsg0010 +"`"+ upperBorderTotalToShow +"`"+ errMsg0007 +"`"+ avvrTotalCurrCounterToShow+"`";
+    // Logger.log(tempStr);
+    notice.push(tempStr);
+    }
+  
+  // Logger.log(notice);
+  if (notice.length > 1)
+    for (var j=0; j < notice.length; j++)
+      {
+      Logger.log(notice[j]);                 // delay !!!
+      sendMessageToChannel(notice[j], 1);
+      }
+
+  // Logger.log(totalRangeCounter);
+  // Logger.log(totalCurrCounter);
+  
+  return;
+}
+
+
+// *****************************************************************************************************************************
+// SAMPLE
+// *****************************************************************************************************************************
+function robot003(spreadsheetID, appID, url)
+{
+  Logger.log("Robot 3 launched");
+  Logger.log("App ID: " + appID + ", Spreadsheet ID:" + spreadsheetID);
+  Logger.log("");
+  return;
+}
